@@ -87,7 +87,7 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         }
 
 
-def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
+def language_model(*, X, M, embed_weights, hidden, config, train, reuse=None):
     """
     A language model output and loss for the language modelling objective described in the original finetune paper.
     This language model uses weights that are tied to the input embedding.
@@ -106,20 +106,40 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
     M = merge_leading_dims(M, 2)
     hidden = merge_leading_dims(hidden, 3)
 
+    hidden_dim, vocab_size = shape_list(embed_weights)
+
     with tf.variable_scope('model/language-model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
         sliced_hidden = hidden[:, :-1]
         lm_h = tf.reshape(sliced_hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
-        lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
-        lm_losses = tf.losses.sparse_softmax_cross_entropy(
-            logits=lm_logits,
-            labels=tf.reshape(X[:, 1:, 0], [-1]),
-            weights=tf.reshape(M[:, 1:], [-1])
-        )
-        lm_logits_shape = shape_list(lm_logits)
-        sliced_hidden_shape = shape_list(sliced_hidden)
+        
+        if train and config.sampled_softmax and config.sampled_softmax > 0:
+            lm_losses = tf.nn.sampled_softmax_loss(
+                embed_weights,
+                tf.zeros([vocab_size]), 
+                tf.reshape(X[:, 1:, 0], [-1, 1]),
+                lm_h,
+                config.sampled_softmax,
+                vocab_size,
+                partition_strategy="div"
+            )
+            logits = None
+
+        else:
+            lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
+            lm_losses = tf.losses.sparse_softmax_cross_entropy(
+                logits=lm_logits,
+                labels=tf.reshape(X[:, 1:, 0], [-1]),
+                weights=tf.reshape(M[:, 1:], [-1])
+            )
+            
+            lm_logits_shape = shape_list(lm_logits)
+            sliced_hidden_shape = shape_list(sliced_hidden)
+            logits = tf.reshape(lm_logits, shape=sliced_hidden_shape[:-1] + [lm_logits_shape[-1]])
+            
+            
         return {
-            'logits': tf.reshape(lm_logits, shape=sliced_hidden_shape[:-1] + [lm_logits_shape[-1]]),
+            'logits': logits,
             'losses': lm_losses,
         }
 
