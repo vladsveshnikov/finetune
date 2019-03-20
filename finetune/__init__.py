@@ -15,7 +15,8 @@ from finetune.comparison_regressor import ComparisonRegressor
 from finetune.ordinal_regressor import OrdinalRegressor, ComparisonOrdinalRegressor
 from finetune.language_model import LanguageModel
 
-__version__, VERSION, version = ("0.5.15",) * 3
+
+__version__, VERSION, version = ("0.6.0",) * 3
 
 # Logging configuration
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"

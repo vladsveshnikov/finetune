@@ -5,7 +5,7 @@ import tensorflow as tf
 from scipy import interpolate
 
 import finetune
-from finetune.base_models.gpt.encoder import GPTEncoder
+
 
 def finetune_model_path(path):
     return os.path.abspath(
@@ -15,6 +15,7 @@ def finetune_model_path(path):
             path
         )
     )
+
 
 def merge_leading_dims(X, target_rank):
     shape = [-1] + X.get_shape().as_list()[1 - target_rank:]
@@ -180,10 +181,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
     for doc_idx, (raw_text, doc_seq, label_seq, prob_seq, associations_seq) in enumerate(loop_vals):
         tokens = encoded_docs.tokens[doc_idx]
         token_ends = encoded_docs.char_locs[doc_idx]
-        if isinstance(encoder, GPTEncoder):
-            token_lengths = [len(token.strip().replace('</w>', '')) for token in tokens]
-        else:
-            token_lengths = [len(token) for token in tokens]
+        token_lengths = [encoder._token_length(token) for token in tokens]
         token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
         n_tokens = len(tokens)
 
@@ -307,10 +305,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
     for doc_idx, (text, label_seq) in enumerate(zip(texts, labels)):
         tokens = encoded_docs.tokens[doc_idx]
         token_ends = encoded_docs.char_locs[doc_idx]
-        if isinstance(encoder, GPTEncoder):
-            token_lengths = [len(token.strip().replace('</w>', '')) for token in tokens]
-        else:
-            token_lengths = [len(token) for token in tokens]
+        token_lengths = [encoder._token_length(token) for token in tokens]
         token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
         n_tokens = len(tokens)
 
@@ -463,7 +458,7 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
                 grads_and_accumulated_vars.append((accum_grad, v))
 
             global_step = global_step if global_step is not None else tf.train.get_or_create_global_step()
-                
+
             with tf.control_dependencies(add_gradients_ops):
                 def apply_grads():
                     with tf.control_dependencies([
